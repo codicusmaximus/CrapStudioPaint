@@ -13,3 +13,8 @@ Windows Registry Editor Version 5.00
 ; Don't let Wine create .desktop files / mime associations on the host
 [HKEY_CURRENT_USER\Software\Wine\DllOverrides]
 "winemenubuilder.exe"=""
+
+; Taskbar + start button inside the Wine virtual desktop used by csp --gamescope,
+; so CSP's windows (CLIP STUDIO, Paint, dialogs) can be switched between.
+[HKEY_CURRENT_USER\Software\Wine\Explorer\Desktops\csp]
+"EnableShell"=dword:00000001
