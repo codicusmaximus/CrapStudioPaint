@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+; Report Windows 10 (CSP 4+/5 requires Win10+)
+[HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion]
+"CurrentBuild"="19045"
+"CurrentBuildNumber"="19045"
+"CurrentVersion"="6.3"
+"ProductName"="Windows 10 Pro"
+
+[HKEY_CURRENT_USER\Software\Wine]
+"Version"="win10"
+
+; Don't let Wine create .desktop files / mime associations on the host
+[HKEY_CURRENT_USER\Software\Wine\DllOverrides]
+"winemenubuilder.exe"=""

@@ -1,0 +1,9 @@
+# Large / machine-local stuff: never commit
+/wine/
+/prefix/
+/cache/
+/dist/
+*.exe
+*.msi
+*.tar.*
+*.tzst
