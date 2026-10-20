@@ -17,6 +17,10 @@ relocate_prefix_user
 # panels (sign-in / start page) never get a renderer process.
 export WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="${WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:-$CSP_WEBVIEW2_ARGS}"
 
+# Tablet pressure/eraser fix for Wine's wintab under Xwayland (setup.sh tabletfix)
+fix="$CSP_ROOT/lib/wintab-xi1-fix.so"
+[[ -f "$fix" ]] && export LD_PRELOAD="$fix${LD_PRELOAD:+:$LD_PRELOAD}"
+
 exe="$WINEPREFIX/$CSP_EXE_REL"
 gamescope=0
 while [[ $# -gt 0 ]]; do

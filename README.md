@@ -56,8 +56,10 @@ X11/Xwayland and working Vulkan/OpenGL drivers; no 32-bit libraries are needed
 | `config/package-exclude.txt` | yes | what the archive leaves out |
 | `config/postinstall.reg` | yes | disables Edge updater services, crash dialogs |
 | `patches/dcomp-shim.patch` | yes | our fixes to the dcomp shim |
+| `patches/wintab-xi1-fix.c` | yes | LD_PRELOAD fix for pen pressure/eraser |
+| `tools/xi-raw.py`, `tools/xi1-*.py` | yes | tablet event diagnostics |
 | `tools/gs-*.sh`, `tools/gs-input.py` | yes | gamescope test harness (screenshots + synthetic clicks) |
-| `wine/`, `prefix/`, `cache/`, `dist/` | no (gitignored) | big binaries |
+| `wine/`, `prefix/`, `lib/`, `cache/`, `dist/` | no (gitignored) | big/built binaries |
 
 ## What was needed, and why
 
@@ -91,6 +93,20 @@ X11/Xwayland and working Vulkan/OpenGL drivers; no 32-bit libraries are needed
     `DCompositionCreateDevice2(NULL, …)` — WebView2 requests both;
   - re-blit on swapchain `Present()`, not only on `Commit()` — without it
     pages paint once and then stay blank/grey.
+- **Pen pressure fix** (`setup.sh tabletfix` → `lib/wintab-xi1-fix.so`,
+  loaded by `csp` via `LD_PRELOAD`; source `patches/wintab-xi1-fix.c`).
+  Under Xwayland, Wine's wintab got the pen with no pressure and the eraser
+  acted like the tip. Diagnosed with `tools/xi-raw.py`, `tools/xi1-test.py`
+  and `tools/xi1-selected.py`: the desktop delivers full pressure, but
+  winex11 calls `XSelectExtensionEvent` once per tablet device on the same
+  window — each call replaces the previous selection, so only the last device
+  (the puck) stays subscribed — and Xwayland drops selections whenever it
+  re-creates the stylus/eraser devices. The shim merges the selections and
+  re-applies them twice a second from Wine's event loop (it also lets tablet
+  events through Wine's input-only message waits). In CSP set
+  *File → Preferences → Tablet* to **Wintab** (TabletPC/Windows Ink doesn't
+  work under Wine). Building the shim needs `gcc` once; packaged archives
+  include the built `.so`.
 - **No per-app Windows version overrides.** Setting `CLIPStudioPaint.exe` to
   Windows 8.1 (as some guides do) makes CSP 5.1 never start WebView2 at all.
 

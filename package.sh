@@ -27,7 +27,7 @@ while IFS= read -r line; do
   excludes+=("--exclude=prefix/${line}")
 done < "$CSP_ROOT/config/package-exclude.txt"
 
-files=(env.sh csp setup.sh package.sh README.md scripts config tools wine prefix)
+files=(env.sh csp setup.sh package.sh README.md scripts config tools patches lib wine prefix)
 echo "Packaging -> $out"
 tar --transform "s#^#${name}/#" "${excludes[@]}" \
     --exclude="tools/__pycache__" \

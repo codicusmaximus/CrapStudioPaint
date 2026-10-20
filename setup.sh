@@ -11,7 +11,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$CSP_ROOT"
 
-STEPS=(wine prefix settings csp postinstall dxvk webview2 dcomp verify)
+STEPS=(wine prefix settings csp postinstall dxvk webview2 dcomp tabletfix verify)
 
 log() { printf '\e[1;34m==> %s\e[0m\n' "$*"; }
 die() { printf '\e[1;31m!! %s\e[0m\n' "$*" >&2; exit 1; }
@@ -121,6 +121,16 @@ step_dcomp() {
   cp "$out" "$WINEPREFIX/drive_c/windows/system32/dcomp.dll"
   "$WINE" reg add 'HKCU\Software\Wine\DllOverrides' /v dcomp /d native,builtin /f >/dev/null
   "$WINESERVER" -w
+}
+
+step_tabletfix() {
+  # LD_PRELOAD shim that fixes wintab pen pressure/eraser under Xwayland (see README).
+  local out="$CSP_ROOT/lib/wintab-xi1-fix.so" src="$CSP_ROOT/patches/wintab-xi1-fix.c"
+  if [[ -f "$out" && "$out" -nt "$src" ]]; then return; fi
+  command -v gcc >/dev/null || die "gcc is needed once to build lib/wintab-xi1-fix.so"
+  log "Building wintab pressure fix"
+  mkdir -p "$CSP_ROOT/lib"
+  gcc -shared -fPIC -O2 -Wall -Wno-nonnull-compare -o "$out" "$src" -ldl -lpthread
 }
 
 step_verify() {
