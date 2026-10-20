@@ -48,10 +48,16 @@ the same steps on the host (needs curl, gcc, patch).
 ## Portable archive
 
 ```bash
-./package.sh        # -> dist/csp-wine-YYYYMMDD.tar.zst
+./wine-csp-wrapper.sh package      # -> dist/csp-wine-YYYYMMDD.tar.zst (~1.8 GB)
 ```
 
-On the other machine: `tar -xf csp-wine-*.tar.zst && ./csp-wine/csp`.
+On the other machine (no docker/compilers needed, just a desktop with Vulkan):
+
+```bash
+tar -xf csp-wine-*.tar.zst
+./csp-wine/wine-csp-wrapper.sh studio   # sign in once (Log in in the sidebar)
+./csp-wine/wine-csp-wrapper.sh run
+```
 The archive contains Wine + the prefix with CSP installed, but **not** CELSYS
 account/license/sign-in data, the WebView2 browser profile, caches or temp
 files (see `config/package-exclude.txt`), so each machine signs in on its own.
