@@ -38,7 +38,15 @@ if (( gamescope )); then
   # so CSP's dialogs and popups stay together. Writes the inner display info to
   # $XDG_RUNTIME_DIR/csp-gamescope.env so tools/gs-shot.sh can screenshot it.
   # Note: gamescope may not forward tablet pressure (see README).
-  W="${GS_W:-1920}"; H="${GS_H:-1080}"
+  W="${GS_W:-1600}"; H="${GS_H:-900}"
+  # A CSP session that is already running (e.g. an old gamescope window) would
+  # swallow the new launch and the new window would close immediately.
+  if pgrep -f 'csp-gamescope[.]env' >/dev/null || pgrep -f 'CLIP STUDIO 1[.]5' >/dev/null; then
+    echo "Closing the already-running CSP session first..." >&2
+    "$WINESERVER" -k 2>/dev/null || true
+    pkill -f 'gamescope.*csp-gamescope[.]env' 2>/dev/null || true
+    sleep 2
+  fi
   info="${XDG_RUNTIME_DIR:-/tmp}/csp-gamescope.env"
   exec gamescope -W "$W" -H "$H" -w "$W" -h "$H" --backend sdl -- \
     bash -c 'printf "DISPLAY=%s\nGAMESCOPE_WAYLAND_DISPLAY=%s\nGS_SIZE=%s\n" "$DISPLAY" "$GAMESCOPE_WAYLAND_DISPLAY" "$1" > "$0"; shift 2; exec "$@"' \
