@@ -7,7 +7,8 @@ Xwayland"). Bug 59224 ("Pen/Eraser pressure not working in any application on
 2-in-1 laptops") may be the same issue; if so, add this analysis there as a
 comment instead of filing a duplicate.
 
-Attach `patches/wine-wintab-select-all-devices.patch`. Patches are normally
+Attach `patches/wine-wintab-select-all-devices.patch`
+(https://github.com/codicusmaximus/CrapStudioPaint/blob/07392ab23f9aafc51cca0506c4a513ee42793cf5/patches/wine-wintab-select-all-devices.patch). Patches are normally
 sent as a merge request on https://gitlab.winehq.org/wine/wine, with a link
 from the bug.
 
@@ -71,8 +72,7 @@ launch" reports.
 
 **Workaround (until fixed):** an LD_PRELOAD shim that merges and re-applies
 the selections:
-https://github.com/codicusmaximus/CrapStudioPaint/blob/main/patches/wintab-xi1-fix.c
-(adjust the link if the repo isn't public).
+https://github.com/codicusmaximus/CrapStudioPaint/blob/07392ab23f9aafc51cca0506c4a513ee42793cf5/patches/wintab-xi1-fix.c
 
 **Steps to reproduce:**
 1. Wayland session (GNOME), Wacom tablet working in native apps.
@@ -80,5 +80,6 @@ https://github.com/codicusmaximus/CrapStudioPaint/blob/main/patches/wintab-xi1-f
    wtcapt.exe) with `WINEDEBUG=+wintab32`.
 3. Draw with the pen: the log shows almost no `motion_event`s and pressure
    stays 0; the eraser end draws like the tip.
-4. `XGetSelectedExtensionEvents` on the app window (e.g. `xi1-selected.py`
-   from the repo above) lists only one tablet device.
+4. `XGetSelectedExtensionEvents` on the app window lists only one tablet
+   device, e.g. with
+   https://github.com/codicusmaximus/CrapStudioPaint/blob/436c23e5d3139cfc94e67d2e00d9fc6404227284/tools/xi1-selected.py
