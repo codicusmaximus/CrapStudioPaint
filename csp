@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Launch Clip Studio Paint from the self-contained prefix. Works from any path
+# (symlink it into ~/bin or point a .desktop file at it).
+#
+#   ./csp                 # start CSP (normal Xwayland/X11 window)
+#   ./csp --gamescope     # start CSP inside a nested gamescope window
+#   ./csp --studio        # start the CLIP STUDIO launcher instead of Paint
+#   ./csp --wine winecfg  # run any Wine command in the prefix
+#   ./csp --kill          # stop everything running in the prefix
+set -euo pipefail
+self="$(readlink -f "${BASH_SOURCE[0]}")"
+source "$(dirname "$self")/env.sh"
+source "$CSP_ROOT/scripts/relocate.sh"
+relocate_prefix_user
+
+# Chromium's sandbox doesn't work under Wine; without this, the WebView2
+# panels (sign-in / start page) never get a renderer process.
+export WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="${WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:---no-sandbox}"
+
+exe="$WINEPREFIX/$CSP_EXE_REL"
+gamescope=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --gamescope) gamescope=1; shift;;
+    --studio) exe="$WINEPREFIX/drive_c/Program Files/CELSYS/CLIP STUDIO 1.5/CLIP STUDIO/CLIPStudio.exe"; shift;;
+    --wine) shift; exec "$WINE" "$@";;
+    --kill) exec "$WINESERVER" -k;;
+    -h|--help) sed -n '2,10p' "$self"; exit 0;;
+    *) break;;
+  esac
+done
+
+[[ -f "$exe" ]] || { echo "CSP is not installed in $WINEPREFIX — run ./setup.sh first" >&2; exit 1; }
+cd "$(dirname "$exe")"
+
+if (( gamescope )); then
+  # Note: gamescope does not forward tablet pressure (see README).
+  exec gamescope -W "${GS_W:-1920}" -H "${GS_H:-1080}" --backend sdl -- "$WINE" "$exe" "$@"
+fi
+exec "$WINE" "$exe" "$@"

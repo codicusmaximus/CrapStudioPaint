@@ -11,7 +11,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$CSP_ROOT"
 
-STEPS=(wine winetricks prefix settings webview2 csp)
+STEPS=(wine prefix settings csp verify)
 
 log() { printf '\e[1;34m==> %s\e[0m\n' "$*"; }
 die() { printf '\e[1;31m!! %s\e[0m\n' "$*" >&2; exit 1; }
@@ -40,12 +40,12 @@ step_wine() {
   "$WINE" --version
 }
 
+# Optional helper (not needed by the default steps): ./setup.sh winetricks
 step_winetricks() {
   fetch "$WINETRICKS_URL" "$CSP_CACHE/winetricks" "$WINETRICKS_SHA256"
   chmod +x "$CSP_CACHE/winetricks"
+  echo "winetricks: $CSP_CACHE/winetricks (source env.sh first)"
 }
-
-winetricks() { "$CSP_CACHE/winetricks" --unattended "$@"; }
 
 step_prefix() {
   [[ -f "$WINEPREFIX/system.reg" ]] && return
@@ -57,13 +57,19 @@ step_prefix() {
 
 step_settings() {
   log "Applying prefix settings"
-  "$WINE" reg import "$CSP_ROOT/config/prefix.reg"
+  "$WINE" reg import "$("$WINE" winepath -w "$CSP_ROOT/config/prefix.reg")"
   "$WINESERVER" -w
 }
 
-step_webview2() {
-  source "$CSP_ROOT/scripts/webview2.sh"
-  install_webview2
+step_verify() {
+  # CSP's installer bundles and installs the Edge WebView2 runtime itself.
+  local wv
+  wv=$("$WINE" reg query 'HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' /v pv 2>/dev/null | awk '/pv/{print $3}' | tr -d '\r')
+  [[ -n "$wv" ]] || die "WebView2 runtime missing (CSP installer should have installed it)"
+  log "WebView2 runtime $wv"
+  [[ -f "$WINEPREFIX/$CSP_EXE_REL" ]] || die "CSP missing"
+  log "CSP installed: $CSP_EXE_REL"
+  source "$CSP_ROOT/scripts/relocate.sh"; relocate_prefix_user
 }
 
 find_csp_installer() {
@@ -80,7 +86,7 @@ step_csp() {
   local iss="$CSP_ROOT/config/csp-setup.iss"
   if [[ -f "$iss" && -z "${CSP_INTERACTIVE:-}" ]]; then
     # Silent InstallShield install using the recorded response file.
-    "$WINE" "$inst" /s /f1"$(winepath -w "$iss")" /f2"$(winepath -w "$CSP_CACHE/csp-setup.log")"
+    "$WINE" "$inst" /s /f1"$("$WINE" winepath -w "$iss")" /f2"$("$WINE" winepath -w "$CSP_CACHE/csp-setup.log")"
   else
     "$WINE" "$inst"
   fi

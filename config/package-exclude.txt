@@ -1,0 +1,24 @@
+# Paths inside the prefix left out of ./package.sh archives (tar globs).
+# @USER@ = the Linux user that built the prefix.
+
+# Machine-specific device links (Wine recreates them)
+dosdevices/*::
+dosdevices/lpt*
+dosdevices/com*
+
+# CELSYS account, license and sign-in state; each machine signs in on its own
+drive_c/users/@USER@/AppData/Roaming/CELSYS
+drive_c/users/@USER@/AppData/Roaming/CELSYSUserData/CELSYS/CLIPStudioCommon
+drive_c/ProgramData/CELSYS/CLIPStudio/Common/Activation*
+
+# WebView2 profile: cookies / sign-in session, caches
+drive_c/users/@USER@/AppData/Local/Microsoft/Edge*
+drive_c/users/@USER@/AppData/Local/Microsoft/EdgeWebView
+
+# Temp files, installer leftovers, crash dumps
+drive_c/users/@USER@/AppData/Local/Temp/*
+drive_c/windows/Temp/*
+drive_c/csp-setup.iss
+drive_c/Program Files (x86)/Microsoft/EdgeUpdate/Download
+drive_c/Program Files (x86)/Microsoft/EdgeUpdate/Log
+drive_c/Program Files (x86)/Microsoft/Temp
