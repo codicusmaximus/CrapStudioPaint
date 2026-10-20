@@ -48,6 +48,9 @@ if (( gamescope )); then
     sleep 2
   fi
   info="${XDG_RUNTIME_DIR:-/tmp}/csp-gamescope.env"
+  # On GNOME Wayland, gamescope's SDL window can fail to show up (no libdecor);
+  # as an Xwayland window it reliably appears with normal decorations.
+  export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
   exec gamescope -W "$W" -H "$H" -w "$W" -h "$H" --backend sdl -- \
     bash -c 'printf "DISPLAY=%s\nGAMESCOPE_WAYLAND_DISPLAY=%s\nGS_SIZE=%s\n" "$DISPLAY" "$GAMESCOPE_WAYLAND_DISPLAY" "$1" > "$0"; shift 2; exec "$@"' \
     "$info" "${W}x${H}" _ "$WINE" explorer "/desktop=csp,${W}x${H}" "$exe" "$@"
