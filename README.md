@@ -10,14 +10,19 @@ made by `package.sh`) can be moved to another machine and run there.
 ```bash
 # 1. put the CSP installer (CSP_xxxw_setup.exe) in ./csp-wine/ or ~/Downloads
 ./setup.sh          # builds wine/ + prefix/ and installs CSP silently
-./csp               # run Clip Studio Paint
+./csp               # run Clip Studio Paint (normal desktop windows — recommended)
 ```
+
+First run: CSP Paint's own sign-in / "Try for free" panel stays blank under Wine
+(see *Known limitation*), so sign in once via `./csp --studio` → **Log in**, then
+start Paint. If Paint ever ignores all clicks, a modal popup (e.g. "What's new")
+is hidden behind the main window — Alt+Tab to it and close it.
 
 `csp` works from any path (symlink it into `~/bin`). Other modes:
 
 | command | what |
 |---|---|
-| `./csp --gamescope` | run inside a nested gamescope window |
+| `./csp --gamescope` | run inside a nested gamescope window (Wine virtual desktop with a taskbar; mainly for testing/screenshots) |
 | `./csp --studio` | run the CLIP STUDIO launcher instead of Paint |
 | `./csp --wine winecfg` | run any Wine tool in the prefix |
 | `./csp --kill` | stop everything in the prefix |
