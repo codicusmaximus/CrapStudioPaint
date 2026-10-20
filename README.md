@@ -93,7 +93,7 @@ X11/Xwayland and working Vulkan/OpenGL drivers; no 32-bit libraries are needed
     `DCompositionCreateDevice2(NULL, …)` — WebView2 requests both;
   - re-blit on swapchain `Present()`, not only on `Commit()` — without it
     pages paint once and then stay blank/grey.
-- **Pen pressure fix** (`setup.sh tabletfix` → `lib/wintab-xi1-fix.so`,
+- **Pen pressure fix** (full write-up: `TABLET-FIX.md`) (`setup.sh tabletfix` → `lib/wintab-xi1-fix.so`,
   loaded by `csp` via `LD_PRELOAD`; source `patches/wintab-xi1-fix.c`).
   Under Xwayland, Wine's wintab got the pen with no pressure and the eraser
   acted like the tip. Diagnosed with `tools/xi-raw.py`, `tools/xi1-test.py`
