@@ -22,3 +22,11 @@ drive_c/csp-setup.iss
 drive_c/Program Files (x86)/Microsoft/EdgeUpdate/Download
 drive_c/Program Files (x86)/Microsoft/EdgeUpdate/Log
 drive_c/Program Files (x86)/Microsoft/Temp
+
+# Personal history (keep the rest of CSP's settings, e.g. Tablet = Wintab)
+drive_c/users/@USER@/AppData/Roaming/CELSYSUserData/CELSYS/CLIPStudioPaintVer1_5_0/RecentFiles
+drive_c/users/@USER@/AppData/Roaming/CELSYSUserData/CELSYS/CLIPStudioPaintVer1_5_0/Statistic
+drive_c/users/@USER@/AppData/Roaming/CELSYSUserData/CELSYS/CLIPStudioPaintVer1_5_0/FilePickerFolderList
+drive_c/users/@USER@/AppData/Roaming/CELSYSUserData/CELSYS/CLIPStudioPaintVer1_5_0/PreviousDocument
+# Diagnostics left by the dcomp shim
+drive_c/dcomp-csp.log

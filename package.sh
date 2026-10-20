@@ -27,9 +27,9 @@ while IFS= read -r line; do
   excludes+=("--exclude=prefix/${line}")
 done < "$CSP_ROOT/config/package-exclude.txt"
 
-files=(env.sh csp setup.sh package.sh README.md scripts config tools patches lib wine prefix)
+files=(env.sh csp wine-csp-wrapper.sh setup.sh package.sh README.md TABLET-FIX.md .dockerignore docker docs scripts config tools patches lib wine prefix)
 echo "Packaging -> $out"
-tar --transform "s#^#${name}/#" "${excludes[@]}" \
+tar --transform "s#^#${name}/#S" "${excludes[@]}" \
     --exclude="tools/__pycache__" \
     -C "$CSP_ROOT" -cf - "${files[@]}" \
   | zstd -T0 -10 -q -o "$out" -f
