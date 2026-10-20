@@ -1,0 +1,4 @@
+# Only the files the container build needs
+*
+!docker/
+!patches/

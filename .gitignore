@@ -8,3 +8,5 @@
 *.tar.*
 *.tzst
 /lib/
+/build/
+/build.new/

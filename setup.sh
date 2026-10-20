@@ -5,7 +5,9 @@
 #   ./setup.sh wine prefix     # only some steps (see STEPS below)
 #
 # Steps are idempotent; re-running skips what is already done.
-# Downloads land in ./cache (gitignored). Put the CSP installer
+# If ./build exists (made by `./wine-csp-wrapper.sh build` in a container),
+# its prebuilt Wine/DXVK/shims are used; otherwise things are downloaded and
+# compiled on the host (needs curl, gcc, patch). Downloads land in ./cache. Put the CSP installer
 # (CSP_*w_setup.exe) in ./csp-wine/ or ~/Downloads, or pass CSP_INSTALLER=path.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
@@ -29,9 +31,16 @@ fetch() { # url dest [sha256]
   fi
 }
 
+CSP_BUILD="$CSP_ROOT/build"
+
 step_wine() {
   if [[ -x "$CSP_WINE/bin/wine" ]] && "$CSP_WINE/bin/wine" --version | grep -q "$WINE_VERSION"; then
     return
+  fi
+  if [[ -x "$CSP_BUILD/wine/bin/wine" ]]; then
+    log "Using Wine from ./build"
+    rm -rf "$CSP_WINE"; cp -a --reflink=auto "$CSP_BUILD/wine" "$CSP_WINE"
+    "$WINE" --version; return
   fi
   fetch "$WINE_URL" "$CSP_CACHE/$WINE_TARBALL" "$WINE_SHA256"
   log "Unpacking Wine $WINE_VERSION ($WINE_FLAVOR)"
@@ -70,9 +79,12 @@ step_postinstall() {
 }
 
 step_dxvk() {
-  local d="$CSP_CACHE/dxvk-$DXVK_VERSION"
-  fetch "$DXVK_URL" "$CSP_CACHE/dxvk-$DXVK_VERSION.tar.gz" "$DXVK_SHA256"
-  [[ -d "$d" ]] || { mkdir -p "$d"; tar -xzf "$CSP_CACHE/dxvk-$DXVK_VERSION.tar.gz" -C "$d" --strip-components=1; }
+  local d="$CSP_BUILD/dxvk"
+  if [[ ! -f "$d/x64/d3d11.dll" ]]; then
+    d="$CSP_CACHE/dxvk-$DXVK_VERSION"
+    fetch "$DXVK_URL" "$CSP_CACHE/dxvk-$DXVK_VERSION.tar.gz" "$DXVK_SHA256"
+    [[ -d "$d" ]] || { mkdir -p "$d"; tar -xzf "$CSP_CACHE/dxvk-$DXVK_VERSION.tar.gz" -C "$d" --strip-components=1; }
+  fi
   log "Installing DXVK $DXVK_VERSION"
   local dll
   for dll in d3d8 d3d9 d3d10core d3d11 dxgi; do
@@ -91,9 +103,13 @@ webview2_version() {
 step_webview2() {
   local v; v=$(webview2_version)
   if [[ -n "$v" && "${v%%.*}" -ge "$WEBVIEW2_MIN_MAJOR" ]]; then return; fi
-  fetch "$WEBVIEW2_URL" "$CSP_CACHE/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+  local wvi="$CSP_BUILD/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+  if [[ ! -f "$wvi" ]]; then
+    wvi="$CSP_CACHE/MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+    fetch "$WEBVIEW2_URL" "$wvi"
+  fi
   log "Installing WebView2 runtime (have: ${v:-none})"
-  "$WINE" "$CSP_CACHE/MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install || true
+  "$WINE" "$wvi" /silent /install || true
   "$WINESERVER" -k || true
   "$WINE" reg import "$("$WINE" winepath -w "$CSP_ROOT/config/postinstall.reg")"
   log "WebView2 runtime now $(webview2_version)"
@@ -103,6 +119,9 @@ step_dcomp() {
   # DirectComposition shim so WebView2 panels render (see README).
   local tc="$CSP_CACHE/llvm-mingw-$LLVM_MINGW_VERSION" src="$CSP_CACHE/dcomp-src-${DCOMP_COMMIT:0:8}"
   local out="$CSP_CACHE/dcomp.dll"
+  if [[ -f "$CSP_BUILD/dcomp.dll" ]]; then
+    out="$CSP_BUILD/dcomp.dll"
+  else
   if [[ ! -x "$tc/bin/x86_64-w64-mingw32-g++" ]]; then
     fetch "$LLVM_MINGW_URL" "$CSP_CACHE/$LLVM_MINGW_TARBALL" "$LLVM_MINGW_SHA256"
     log "Unpacking llvm-mingw $LLVM_MINGW_VERSION"
@@ -117,6 +136,7 @@ step_dcomp() {
     "$tc/bin/x86_64-w64-mingw32-g++" -D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -shared -static -O2 -std=c++17 \
       -o "$out" "$src/dcomp_csp.cpp" "$src/dcomp.def" -lole32 -lgdi32 -ldxgi -ld3d11 -luuid
   fi
+  fi
   log "Installing dcomp.dll shim"
   cp "$out" "$WINEPREFIX/drive_c/windows/system32/dcomp.dll"
   "$WINE" reg add 'HKCU\Software\Wine\DllOverrides' /v dcomp /d native,builtin /f >/dev/null
@@ -126,6 +146,9 @@ step_dcomp() {
 step_tabletfix() {
   # LD_PRELOAD shim that fixes wintab pen pressure/eraser under Xwayland (see README).
   local out="$CSP_ROOT/lib/wintab-xi1-fix.so" src="$CSP_ROOT/patches/wintab-xi1-fix.c"
+  if [[ -f "$CSP_BUILD/wintab-xi1-fix.so" ]]; then
+    mkdir -p "$CSP_ROOT/lib"; cp "$CSP_BUILD/wintab-xi1-fix.so" "$out"; return
+  fi
   if [[ -f "$out" && "$out" -nt "$src" ]]; then return; fi
   command -v gcc >/dev/null || die "gcc is needed once to build lib/wintab-xi1-fix.so"
   log "Building wintab pressure fix"
@@ -155,16 +178,23 @@ find_csp_installer() {
 }
 
 step_csp() {
-  if [[ -f "$WINEPREFIX/$CSP_EXE_REL" ]]; then return; fi
+  if [[ -f "$WINEPREFIX/$CSP_EXE_REL" && -z "${CSP_REINSTALL:-}" ]]; then return; fi
   local inst; inst=$(find_csp_installer)
-  [[ -n "$inst" ]] || die "CSP installer not found; download CSP_xxxw_setup.exe from clipstudio.net into ./csp-wine/"
+  [[ -n "$inst" ]] || die "CSP installer not found; pass it: ./wine-csp-wrapper.sh install CSP_xxxw_setup.exe"
   log "Installing CSP from $inst"
-  local iss="$CSP_ROOT/config/csp-setup.iss"
+  local iss="$CSP_ROOT/config/csp-setup.iss" slog="$CSP_CACHE/csp-setup.log" ok=""
+  mkdir -p "$CSP_CACHE"; rm -f "$slog"
   if [[ -f "$iss" && -z "${CSP_INTERACTIVE:-}" ]]; then
-    # Silent InstallShield install using the recorded response file.
-    "$WINE" "$inst" /s /f1"$("$WINE" winepath -w "$iss")" /f2"$("$WINE" winepath -w "$CSP_CACHE/csp-setup.log")"
-  else
-    "$WINE" "$inst"
+    # Silent InstallShield install with the recorded answers (recorded with
+    # CSP 5.1.5; other versions may ask different questions -> fall back).
+    log "Trying silent install (accepts the CSP license on your behalf)"
+    "$WINE" "$inst" /s /f1"$("$WINE" winepath -w "$iss")" /f2"$("$WINE" winepath -w "$slog")" || true
+    grep -q 'ResultCode=0' "$slog" 2>/dev/null && ok=1
+    [[ -n "$ok" ]] || log "Silent install didn't work for this installer version; opening the normal installer"
+  fi
+  if [[ -z "$ok" ]]; then
+    log "Click through the CSP installer (keep the default install folder)"
+    "$WINE" "$inst" || true
   fi
   # The installer leaves the Edge updater services running, so don't wait on wineserver.
   "$WINESERVER" -k || true

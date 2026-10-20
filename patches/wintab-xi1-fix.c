@@ -32,7 +32,19 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <time.h>
 #define DBG(...) do { if (getenv("WINTAB_XI1_FIX_DEBUG")) fprintf(stderr, "[xi1fix] " __VA_ARGS__); } while (0)
+/* Bind to the oldest glibc symbol versions so a build made on a new distro
+ * still loads on older ones (glibc >= 2.17). */
+#if defined(__x86_64__) && defined(__GLIBC__)
+__asm__(".symver dlvsym,dlvsym@GLIBC_2.2.5");
+__asm__(".symver dladdr,dladdr@GLIBC_2.2.5");
+__asm__(".symver pthread_mutex_lock,pthread_mutex_lock@GLIBC_2.2.5");
+__asm__(".symver pthread_mutex_unlock,pthread_mutex_unlock@GLIBC_2.2.5");
+__asm__(".symver clock_gettime,clock_gettime@GLIBC_2.17");
+__asm__(".symver memcpy,memcpy@GLIBC_2.2.5");
+#endif
 
 typedef struct _XDisplay Display;
 typedef union { int type; long pad[24]; } XEvent;
@@ -78,7 +90,6 @@ static int xinput_first_event(Display *d)
 }
 
 /* ---- XSelectExtensionEvent: accumulate classes per window ---- */
-#include <pthread.h>
 typedef unsigned long XEventClass;
 #define MAX_WINDOWS 64
 #define MAX_CLASSES 64
@@ -117,7 +128,6 @@ int XSelectExtensionEvent(Display *d, unsigned long win, XEventClass *list, int 
     return real(d, win, merged, n);
 }
 
-#include <time.h>
 static void reapply_selections(Display *d)
 {
     static __thread struct timespec last;

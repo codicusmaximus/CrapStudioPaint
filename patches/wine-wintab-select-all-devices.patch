@@ -1,0 +1,34 @@
+--- a/dlls/winex11.drv/wintab.c
++++ b/dlls/winex11.drv/wintab.c
+@@ -1014,7 +1014,8 @@
+     XDeviceInfo     *devices;
+     XDeviceInfo     *target = NULL;
+     XDevice         *the_device;
+-    XEventClass     event_list[7];
++    XEventClass     event_list[CURSORMAX * 7];
++    int             event_number = 0;
+     Window          win = X11DRV_get_whole_window( owner );
+ 
+     if (!win || !xinput_handle) return FALSE;
+@@ -1027,7 +1028,6 @@
+     for (cur_loop=0; cur_loop < CURSORMAX; cur_loop++)
+     {
+         char   cursorNameA[WT_MAX_NAME_LEN];
+-        int    event_number=0;
+ 
+         if (!gSysCursor[cur_loop].ACTIVE) continue;
+ 
+@@ -1083,10 +1083,11 @@
+                 X11DRV_register_event_handler( proximity_in_type, proximity_event, "XInput ProximityIn" );
+             if (proximity_out_type)
+                 X11DRV_register_event_handler( proximity_out_type, proximity_event, "XInput ProximityOut" );
+-
+-            pXSelectExtensionEvent(data->display, win, event_list, event_number);
+         }
+     }
++    /* XSelectExtensionEvent replaces the client's previous selection on the
++     * window, so select the events of all tablet devices in a single call. */
++    if (event_number) pXSelectExtensionEvent(data->display, win, event_list, event_number);
+     XSync(data->display, False);
+     X11DRV_check_error();
+ 

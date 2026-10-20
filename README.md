@@ -7,16 +7,34 @@ made by `package.sh`) can be moved to another machine and run there.
 
 ## Quick start
 
+Needs: **docker or podman** (to build), a Linux desktop (X11 or Wayland) with
+working Vulkan drivers, and the CSP installer from clipstudio.net.
+
 ```bash
-# 1. put the CSP installer (CSP_xxxw_setup.exe) in ./csp-wine/ or ~/Downloads
-./setup.sh          # builds wine/ + prefix/ and installs CSP silently
-./csp               # run Clip Studio Paint (normal desktop windows — recommended)
+./wine-csp-wrapper.sh install ~/Downloads/CSP_515w_setup.exe   # build + prefix + install
+./wine-csp-wrapper.sh studio    # first time only: "Log in" in the left sidebar
+./wine-csp-wrapper.sh run       # run Clip Studio Paint
 ```
 
-First run: CSP Paint's own sign-in / "Try for free" panel stays blank under Wine
-(see *Known limitation*), so sign in once via `./csp --studio` → **Log in**, then
-start Paint. If Paint ever ignores all clicks, a modal popup (e.g. "What's new")
-is hidden behind the main window — Alt+Tab to it and close it.
+`install` builds everything in a container the first time (`./build`:
+portable Wine, DXVK, the WebView2 runtime, the dcomp shim and the pen pressure
+fix — see *What was needed*), creates the Wine prefix in `./prefix`, and runs
+your CSP installer: silently with recorded answers when they fit, otherwise the
+normal installer window opens for you to click through (keep the default
+folder). Running it again with a newer installer updates CSP.
+
+Other wrapper commands: `build`, `run --gamescope`, `studio`, `winecfg`,
+`kill`, `package`, `status`, `help`. Without docker/podman, `./setup.sh` does
+the same steps on the host (needs curl, gcc, patch).
+
+**First run notes**
+- CSP Paint's own sign-in / "Try for free" panel stays blank under Wine (see
+  *Known limitation*), so sign in once in CLIP STUDIO (`studio` → **Log in**),
+  then start Paint.
+- Pen pressure: in CSP set *File → Preferences → Tablet* to **Wintab**, then
+  restart CSP. Plug the tablet in before starting CSP.
+- If Paint ever ignores all clicks, a modal popup (e.g. "What's new") is hidden
+  behind the main window — Alt+Tab to it and close it.
 
 `csp` works from any path (symlink it into `~/bin`). Other modes:
 
@@ -47,6 +65,8 @@ X11/Xwayland and working Vulkan/OpenGL drivers; no 32-bit libraries are needed
 
 | path | committed? | what |
 |---|---|---|
+| `wine-csp-wrapper.sh` | yes | main entry point: build / install / run |
+| `docker/Dockerfile` | yes | container build of all supporting pieces |
 | `env.sh` | yes | pinned versions + environment (sourced by every script) |
 | `setup.sh` | yes | reproducible build, steps: `wine prefix settings csp postinstall dxvk webview2 dcomp verify` |
 | `csp` | yes | launcher |
@@ -59,7 +79,7 @@ X11/Xwayland and working Vulkan/OpenGL drivers; no 32-bit libraries are needed
 | `patches/wintab-xi1-fix.c` | yes | LD_PRELOAD fix for pen pressure/eraser |
 | `tools/xi-raw.py`, `tools/xi1-*.py` | yes | tablet event diagnostics |
 | `tools/gs-*.sh`, `tools/gs-input.py` | yes | gamescope test harness (screenshots + synthetic clicks) |
-| `wine/`, `prefix/`, `lib/`, `cache/`, `dist/` | no (gitignored) | big/built binaries |
+| `build/`, `wine/`, `prefix/`, `lib/`, `cache/`, `dist/` | no (gitignored) | big/built binaries |
 
 ## What was needed, and why
 
