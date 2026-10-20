@@ -49,7 +49,7 @@ Two problems stack up:
 
 ## The fix (`patches/wintab-xi1-fix.c`)
 
-A ~150-line `LD_PRELOAD` library, loaded by the `csp` launcher. It changes no
+A ~180-line `LD_PRELOAD` library, loaded by the `csp` launcher. It changes no
 Wine files.
 
 - **Merges subscriptions.** It wraps `XSelectExtensionEvent`. For calls coming
