@@ -28,3 +28,28 @@ export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+${WINEDLLOVERRIDES};}winemenubuilde
 export WINEDEBUG="${WINEDEBUG:--all}"
 
 CSP_EXE_REL="drive_c/Program Files/CELSYS/CLIP STUDIO 1.5/CLIP STUDIO PAINT/CLIPStudioPaint.exe"
+
+# Cross compiler for the dcomp.dll shim (built from source at setup time)
+LLVM_MINGW_VERSION="20260922"
+LLVM_MINGW_TARBALL="llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+LLVM_MINGW_URL="https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${LLVM_MINGW_TARBALL}"
+LLVM_MINGW_SHA256="bb7bb7654b33d5aa8712acb837c963b2e0c56352560c76105270a3268c665c21"
+
+# DirectComposition shim source (CSPenguin-Installer, pinned commit) + our patch
+DCOMP_COMMIT="868d022adfdc3740449241f4721debbf4b1b1426"
+DCOMP_BASE_URL="https://raw.githubusercontent.com/parka6060/CSPenguin-Installer/${DCOMP_COMMIT}/patches/dcomp"
+DCOMP_CPP_SHA256="e516fd33b7da2452a90b96a9bbb42920564afd1a91d4ba629cad34acfb0cc83a"
+DCOMP_DEF_SHA256="319c1a01d6ca059c5127f62a4a6250ccead3af8ae1f4b335b7c2b1f7fe8b4e92"
+
+# DXVK (D3D11 -> Vulkan); the shim + WebView2 need it
+DXVK_VERSION="3.1.1"
+DXVK_URL="https://github.com/doitsujin/dxvk/releases/download/v${DXVK_VERSION}/dxvk-${DXVK_VERSION}.tar.gz"
+DXVK_SHA256="40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608"
+
+# Newer WebView2 runtime than the 115 bundled with CSP (Microsoft evergreen
+# standalone installer; Microsoft updates this file, so it is not hash-pinned).
+WEBVIEW2_URL="https://go.microsoft.com/fwlink/?linkid=2124701"
+WEBVIEW2_MIN_MAJOR=130
+
+# Chromium flags for the WebView2 panels under Wine
+CSP_WEBVIEW2_ARGS="--no-sandbox --disable-gpu-compositing --disable-gpu-vsync --in-process-gpu"

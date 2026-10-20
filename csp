@@ -15,7 +15,7 @@ relocate_prefix_user
 
 # Chromium's sandbox doesn't work under Wine; without this, the WebView2
 # panels (sign-in / start page) never get a renderer process.
-export WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="${WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:---no-sandbox}"
+export WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="${WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:-$CSP_WEBVIEW2_ARGS}"
 
 exe="$WINEPREFIX/$CSP_EXE_REL"
 gamescope=0

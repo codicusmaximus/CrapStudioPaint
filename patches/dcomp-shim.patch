@@ -1,0 +1,250 @@
+--- a/dcomp_csp.cpp
++++ b/dcomp_csp.cpp
+@@ -63,6 +63,10 @@
+ static ID3D11Device    *g_d3dDev  = nullptr;
+ static IDXGIFactory2   *g_factory = nullptr;
+ 
++/* [crapstudiopaint] Chromium presents new frames via Present() without a
++   DComp Commit(); re-blit all targets in this process when that happens. */
++static void commit_all_devices();
++
+ /* FakeCompositionSwapChain : IDXGISwapChain1 , backs CreateSwapChainForComposition, no HWND, just a texture */
+ struct FakeCompositionSwapChain final : IDXGISwapChain1
+ {
+@@ -119,7 +123,11 @@
+     { return dev->QueryInterface(riid, ppv); }
+ 
+     /* IDXGISwapChain */
+-    HRESULT STDMETHODCALLTYPE Present(UINT,UINT) override { return S_OK; }
++    HRESULT STDMETHODCALLTYPE Present(UINT,UINT flags) override
++    {
++        if (!(flags & DXGI_PRESENT_TEST)) commit_all_devices();
++        return S_OK;
++    }
+     HRESULT STDMETHODCALLTYPE GetBuffer(UINT buf, REFIID riid, void **ppSurface) override
+     {
+         if (!tex || buf != 0) { *ppSurface = nullptr; return DXGI_ERROR_INVALID_CALL; }
+@@ -625,6 +633,11 @@
+     HRESULT STDMETHODCALLTYPE Scroll(const RECT *, const RECT *, int, int) override { return S_OK; }
+ };
+ 
++/* [crapstudiopaint] registry of live devices, for commit_all_devices() */
++static CRITICAL_SECTION g_devLock;
++static std::vector<FakeDevice *> g_devices;
++static void unregister_device(FakeDevice *d);
++
+ /* FakeDevice : IDCompositionDesktopDevice */
+ struct FakeDevice final : IDCompositionDesktopDevice
+ {
+@@ -634,8 +647,10 @@
+     IDXGIFactory2             *factory = nullptr;
+     std::vector<FakeTarget *>  targets;
+ 
++    FakeDevice();
+     ~FakeDevice()
+     {
++        unregister_device(this);
+         for (auto *t : targets) t->Release();
+         if (factory) factory->Release();
+         if (d3dDev)  d3dDev->Release();
+@@ -644,8 +659,9 @@
+ 
+     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **ppv) override
+     {
+-        LOG("Device::QI %08lx-%04x-%04x-%02x%02x...",
+-            riid.Data1, riid.Data2, riid.Data3, riid.Data4[0], riid.Data4[1]);
++        LOG("Device::QI %08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
++            riid.Data1, riid.Data2, riid.Data3, riid.Data4[0], riid.Data4[1], riid.Data4[2],
++            riid.Data4[3], riid.Data4[4], riid.Data4[5], riid.Data4[6], riid.Data4[7]);
+         if (IsEqualIID(riid, IID_IUnknown)
+          || IsEqualIID(riid, MY_IID_IDCompositionDevice2)
+          || IsEqualIID(riid, MY_IID_IDCompositionDesktopDevice))
+@@ -662,7 +678,9 @@
+     /* IDCompositionDevice2 */
+     HRESULT STDMETHODCALLTYPE Commit() override
+     {
+-        LOG("Device::Commit (%zu targets)", targets.size());
++        static LONG nCommits = 0;
++        LONG n = InterlockedIncrement(&nCommits);
++        if (n <= 20 || n % 500 == 0) LOG("Device::Commit #%ld (%zu targets)", n, targets.size());
+ 
+         static int isPaint = -1;
+         if (isPaint < 0) {
+@@ -703,7 +721,7 @@
+     { *s = nullptr; return E_NOTIMPL; }
+ 
+ #define STUB_CREATE(T) \
+-    HRESULT STDMETHODCALLTYPE Create##T(IDComposition##T **p) override { *p = nullptr; return E_NOTIMPL; }
++    HRESULT STDMETHODCALLTYPE Create##T(IDComposition##T **p) override { LOG("STUB Create" #T); *p = nullptr; return E_NOTIMPL; }
+     STUB_CREATE(TranslateTransform)
+     STUB_CREATE(ScaleTransform)
+     STUB_CREATE(RotateTransform)
+@@ -758,26 +776,137 @@
+     }
+ 
+     HRESULT STDMETHODCALLTYPE CreateSurfaceFromHandle(HANDLE, IUnknown **s) override
++    { LOG("STUB CreateSurfaceFromHandle"); if (s) *s = nullptr; return E_NOTIMPL; }
++
++    HRESULT STDMETHODCALLTYPE CreateSurfaceFromHwnd(HWND, IUnknown **s) override
+     { if (s) *s = nullptr; return E_NOTIMPL; }
++};
++
++
++FakeDevice::FakeDevice()
++{
++    EnterCriticalSection(&g_devLock); g_devices.push_back(this); LeaveCriticalSection(&g_devLock);
++}
++
++static void unregister_device(FakeDevice *d)
++{
++    EnterCriticalSection(&g_devLock);
++    for (auto it = g_devices.begin(); it != g_devices.end(); ++it)
++        if (*it == d) { g_devices.erase(it); break; }
++    LeaveCriticalSection(&g_devLock);
++}
++
++static void commit_all_devices()
++{
++    EnterCriticalSection(&g_devLock);
++    std::vector<FakeDevice *> devs = g_devices;
++    for (auto *d : devs) d->AddRef();
++    LeaveCriticalSection(&g_devLock);
++    for (auto *d : devs) { d->Commit(); d->Release(); }
++}
++
++/* [crapstudiopaint] FakeDeviceV1 : IDCompositionDevice (Win8 API, IID c37ea93a).
++   WebView2's host side asks for this one; forward everything to FakeDevice. */
++static const GUID MY_IID_IDCompositionDevice =
++    {0xc37ea93a,0xe7aa,0x450d,{0xb1,0x6f,0x97,0x46,0xcb,0x04,0x07,0xf3}};
++
++struct FakeDeviceV1 final : IDCompositionDevice
++{
++    volatile LONG ref = 1;
++    FakeDevice   *inner;
++    explicit FakeDeviceV1(FakeDevice *d) : inner(d) {}
++    ~FakeDeviceV1() { inner->Release(); }
+ 
++    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **ppv) override
++    {
++        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, MY_IID_IDCompositionDevice)) {
++            *ppv = static_cast<IDCompositionDevice *>(this); AddRef(); return S_OK;
++        }
++        return inner->QueryInterface(riid, ppv);
++    }
++    ULONG STDMETHODCALLTYPE AddRef()  override { return InterlockedIncrement(&ref); }
++    ULONG STDMETHODCALLTYPE Release() override
++    { ULONG r = InterlockedDecrement(&ref); if (r == 0) delete this; return r; }
++
++    HRESULT STDMETHODCALLTYPE Commit() override { return inner->Commit(); }
++    HRESULT STDMETHODCALLTYPE WaitForCommitCompletion() override { return S_OK; }
++    HRESULT STDMETHODCALLTYPE GetFrameStatistics(DCOMPOSITION_FRAME_STATISTICS *s) override
++    { return inner->GetFrameStatistics(s); }
++    HRESULT STDMETHODCALLTYPE CreateTargetForHwnd(HWND h, BOOL top, IDCompositionTarget **t) override
++    { return inner->CreateTargetForHwnd(h, top, t); }
++    HRESULT STDMETHODCALLTYPE CreateVisual(IDCompositionVisual **v) override
++    {
++        IDCompositionVisual2 *v2 = nullptr;
++        HRESULT hr = inner->CreateVisual(&v2);
++        *v = v2; /* IDCompositionVisual2 derives from IDCompositionVisual */
++        return hr;
++    }
++    HRESULT STDMETHODCALLTYPE CreateSurface(UINT w, UINT h, DXGI_FORMAT f, DXGI_ALPHA_MODE a,
++                                            IDCompositionSurface **s) override
++    { return inner->CreateSurface(w, h, f, a, s); }
++    HRESULT STDMETHODCALLTYPE CreateVirtualSurface(UINT, UINT, DXGI_FORMAT, DXGI_ALPHA_MODE,
++                                                   IDCompositionVirtualSurface **s) override
++    { *s = nullptr; return E_NOTIMPL; }
++    HRESULT STDMETHODCALLTYPE CreateSurfaceFromHandle(HANDLE, IUnknown **s) override
++    { LOG("STUB CreateSurfaceFromHandle"); if (s) *s = nullptr; return E_NOTIMPL; }
+     HRESULT STDMETHODCALLTYPE CreateSurfaceFromHwnd(HWND, IUnknown **s) override
+     { if (s) *s = nullptr; return E_NOTIMPL; }
++#define STUB_V1(T) \
++    HRESULT STDMETHODCALLTYPE Create##T(IDComposition##T **p) override { LOG("STUB v1 Create" #T); *p = nullptr; return E_NOTIMPL; }
++    STUB_V1(TranslateTransform) STUB_V1(ScaleTransform) STUB_V1(RotateTransform)
++    STUB_V1(SkewTransform) STUB_V1(MatrixTransform)
++    STUB_V1(TranslateTransform3D) STUB_V1(ScaleTransform3D) STUB_V1(RotateTransform3D)
++    STUB_V1(MatrixTransform3D) STUB_V1(EffectGroup) STUB_V1(RectangleClip) STUB_V1(Animation)
++#undef STUB_V1
++    HRESULT STDMETHODCALLTYPE CreateTransformGroup(IDCompositionTransform **, UINT,
++                                                   IDCompositionTransform **o) override
++    { *o = nullptr; return E_NOTIMPL; }
++    HRESULT STDMETHODCALLTYPE CreateTransform3DGroup(IDCompositionTransform3D **, UINT,
++                                                     IDCompositionTransform3D **o) override
++    { *o = nullptr; return E_NOTIMPL; }
++    HRESULT STDMETHODCALLTYPE CheckDeviceState(BOOL *valid) override
++    { if (valid) *valid = TRUE; return S_OK; }
+ };
+ 
++/* [crapstudiopaint] DCompositionCreateDevice2(NULL, ...) is legal: create our own device. */
++static ID3D11Device *create_own_d3d11()
++{
++    ID3D11Device *dev = nullptr;
++    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
++                                   D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
++                                   D3D11_SDK_VERSION, &dev, nullptr, nullptr);
++    if (FAILED(hr))
++        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
++                               D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
++                               D3D11_SDK_VERSION, &dev, nullptr, nullptr);
++    LOG("create_own_d3d11 -> %08lx dev=%p", hr, dev);
++    return SUCCEEDED(hr) ? dev : nullptr;
++}
++
+ /* Exported entry points */
+ extern "C" {
+ 
+ HRESULT WINAPI DCompositionCreateDevice2(IUnknown *renderingDevice, REFIID iid, void **ppDevice)
+ {
+-    LOG("DCompositionCreateDevice2 iid=%08lx", iid.Data1);
++    { char exe[MAX_PATH] = {}; GetModuleFileNameA(nullptr, exe, sizeof(exe));
++      LOG("DCompositionCreateDevice2 iid=%08lx dev=%p pid=%lu %s", iid.Data1, renderingDevice, GetCurrentProcessId(), exe); }
+ 
+-    if (!renderingDevice || !ppDevice) return E_INVALIDARG;
++    if (!ppDevice) return E_INVALIDARG;
++
++    bool wantV1 = IsEqualIID(iid, MY_IID_IDCompositionDevice);
++    ID3D11Device *own = nullptr;
++    if (!renderingDevice) {
++        own = create_own_d3d11();
++        if (!own) { *ppDevice = nullptr; return E_FAIL; }
++        renderingDevice = own;
++    }
+ 
+-    if (!IsEqualIID(iid, MY_IID_IDCompositionDesktopDevice)
++    if (!wantV1
++     && !IsEqualIID(iid, MY_IID_IDCompositionDesktopDevice)
+      && !IsEqualIID(iid, MY_IID_IDCompositionDevice2)
+      && !IsEqualIID(iid, IID_IUnknown))
+     {
+-        LOG("  unsupported IID"); *ppDevice = nullptr; return E_NOINTERFACE;
++        LOG("  unsupported IID"); if (own) own->Release(); *ppDevice = nullptr; return E_NOINTERFACE;
+     }
+ 
+     auto *dev = new FakeDevice();
+@@ -815,7 +944,9 @@
+     if (!g_factory) { g_factory = dev->factory; g_factory->AddRef(); }
+     install_hook(dev->factory);
+ 
+-    LOG("  OK d3dDev=%p factory=%p", dev->d3dDev, dev->factory);
++    if (own) own->Release();
++    LOG("  OK d3dDev=%p factory=%p v1=%d", dev->d3dDev, dev->factory, (int)wantV1);
++    if (wantV1) { *ppDevice = static_cast<IDCompositionDevice *>(new FakeDeviceV1(dev)); return S_OK; }
+     *ppDevice = static_cast<IDCompositionDesktopDevice *>(dev);
+     return S_OK;
+ }
+@@ -832,6 +963,7 @@
+ 
+ HRESULT WINAPI DCompositionCreateSurfaceHandle(DWORD, SECURITY_ATTRIBUTES *, HANDLE *h)
+ {
++    LOG("STUB DCompositionCreateSurfaceHandle");
+     if (h) *h = nullptr; return E_NOTIMPL;
+ }
+ 
+@@ -852,6 +984,7 @@
+ BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID)
+ {
+     if (reason == DLL_PROCESS_ATTACH) {
++        InitializeCriticalSection(&g_devLock);
+         /* Hook DXGI from a thread to avoid touching the loader lock */
+         HANDLE t = CreateThread(nullptr, 0, deferred_hook_thread, nullptr, 0, nullptr);
+         if (t) CloseHandle(t);
