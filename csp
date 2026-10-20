@@ -34,7 +34,14 @@ done
 cd "$(dirname "$exe")"
 
 if (( gamescope )); then
-  # Note: gamescope does not forward tablet pressure (see README).
-  exec gamescope -W "${GS_W:-1920}" -H "${GS_H:-1080}" --backend sdl -- "$WINE" "$exe" "$@"
+  # Nested gamescope window; inside it a Wine virtual desktop of the same size
+  # so CSP's dialogs and popups stay together. Writes the inner display info to
+  # $XDG_RUNTIME_DIR/csp-gamescope.env so tools/gs-shot.sh can screenshot it.
+  # Note: gamescope may not forward tablet pressure (see README).
+  W="${GS_W:-1920}"; H="${GS_H:-1080}"
+  info="${XDG_RUNTIME_DIR:-/tmp}/csp-gamescope.env"
+  exec gamescope -W "$W" -H "$H" -w "$W" -h "$H" --backend sdl -- \
+    bash -c 'printf "DISPLAY=%s\nGAMESCOPE_WAYLAND_DISPLAY=%s\nGS_SIZE=%s\n" "$DISPLAY" "$GAMESCOPE_WAYLAND_DISPLAY" "$1" > "$0"; shift 2; exec "$@"' \
+    "$info" "${W}x${H}" _ "$WINE" explorer "/desktop=csp,${W}x${H}" "$exe" "$@"
 fi
 exec "$WINE" "$exe" "$@"
