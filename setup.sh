@@ -11,7 +11,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$CSP_ROOT"
 
-STEPS=(wine prefix settings csp verify)
+STEPS=(wine prefix settings csp postinstall verify)
 
 log() { printf '\e[1;34m==> %s\e[0m\n' "$*"; }
 die() { printf '\e[1;31m!! %s\e[0m\n' "$*" >&2; exit 1; }
@@ -61,6 +61,14 @@ step_settings() {
   "$WINESERVER" -w
 }
 
+step_postinstall() {
+  log "Post-install tweaks"
+  # Keep the bundled WebView2 pinned and stop background updater services
+  # (they also keep wineserver alive forever).
+  "$WINE" reg import "$("$WINE" winepath -w "$CSP_ROOT/config/postinstall.reg")"
+  "$WINESERVER" -k || true
+}
+
 step_verify() {
   # CSP's installer bundles and installs the Edge WebView2 runtime itself.
   local wv
@@ -74,8 +82,13 @@ step_verify() {
 
 find_csp_installer() {
   if [[ -n "${CSP_INSTALLER:-}" ]]; then echo "$CSP_INSTALLER"; return; fi
-  ls -1t "$CSP_ROOT"/csp-wine/CSP_*w_setup.exe "$CSP_ROOT"/installers/CSP_*w_setup.exe \
-    "$HOME"/Downloads/CSP_*w_setup.exe 2>/dev/null | head -1
+  # First directory that has one wins; within it, the highest version.
+  local d f
+  for d in "$CSP_ROOT/csp-wine" "$CSP_ROOT/installers" "$HOME/Downloads"; do
+    f=$(compgen -G "$d/CSP_*w_setup.exe" | sort -V | tail -1 || true)
+    [[ -n "$f" ]] && { echo "$f"; return; }
+  done
+  return 0
 }
 
 step_csp() {
@@ -90,8 +103,10 @@ step_csp() {
   else
     "$WINE" "$inst"
   fi
-  "$WINESERVER" -w
+  # The installer leaves the Edge updater services running, so don't wait on wineserver.
+  "$WINESERVER" -k || true
   [[ -f "$WINEPREFIX/$CSP_EXE_REL" ]] || die "CSP did not install (expected $CSP_EXE_REL)"
+  step_postinstall
 }
 
 steps=("$@"); [[ ${#steps[@]} -eq 0 ]] && steps=("${STEPS[@]}")

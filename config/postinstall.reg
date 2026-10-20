@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; Disable Edge updater services (installed by CSP's bundled WebView2 setup):
+; keeps the WebView2 runtime pinned and lets wineserver exit when CSP closes.
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\edgeupdate]
+"Start"=dword:00000004
+
+[HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\edgeupdatem]
+"Start"=dword:00000004
+
+; No crash dialog popups
+[HKEY_CURRENT_USER\Software\Wine\WineDbg]
+"ShowCrashDialog"=dword:00000000
